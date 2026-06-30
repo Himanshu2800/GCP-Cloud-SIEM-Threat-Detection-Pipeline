@@ -1,0 +1,39 @@
+{
+  "protoPayload": {
+    "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+    "authenticationInfo": {
+      "principalEmail": "user@example.com"
+    },
+    "requestMetadata": {
+      "callerIp": "REDACTED",
+      "callerSuppliedUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36,gzip(gfe),gzip(gfe)"
+    },
+    "serviceName": "compute.googleapis.com",
+    "methodName": "v1.compute.instances.delete",
+    "resourceName": "projects/cloud-siem-detection-lab/zones/asia-south2-c/instances/instance-20260630-073812",
+    "request": {
+      "@type": "type.googleapis.com/compute.instances.delete"
+    }
+  },
+  "insertId": "-tvfg3chau",
+  "resource": {
+    "type": "gce_instance",
+    "labels": {
+      "zone": "asia-south2-c",
+      "instance_id": "5004863433866136588",
+      "project_id": "cloud-siem-detection-lab"
+    }
+  },
+  "timestamp": "2026-06-30T07:42:12.116266Z",
+  "severity": "NOTICE",
+  "labels": {
+    "compute.googleapis.com/root_trigger_id": "ced60cf7-0199-4d97-b553-405d905cb5cf"
+  },
+  "logName": "projects/cloud-siem-detection-lab/logs/cloudaudit.googleapis.com%2Factivity",
+  "operation": {
+    "id": "operation-1782805310538-65573b53d012a-096d5114-6ca4e1aa",
+    "producer": "compute.googleapis.com",
+    "last": true
+  },
+  "receiveTimestamp": "2026-06-30T07:42:12.501537084Z"
+}
