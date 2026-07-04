@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-07-04T16:31:34.08803752Z",
+  "actor": "user@example.com",
+  "action": "google.logging.v2.LoggingServiceV2.ReadLogEntriesLegacy",
+  "resource": "projects/cloud-siem-detection-lab",
+  "source_ip": "REDACTED",
+  "log_source": "logging.googleapis.com",
+  "severity": "INFO",
+  "raw": {
+    "insertId": "1cuf3addqwto",
+    "logName": "projects/cloud-siem-detection-lab/logs/cloudaudit.googleapis.com%2Fdata_access",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "authenticationInfo": {
+        "principalEmail": "user@example.com"
+      },
+      "authorizationInfo": [
+        {
+          "granted": true,
+          "permission": "logging.logEntries.list",
+          "permissionType": "DATA_READ",
+          "resource": "projects/cloud-siem-detection-lab",
+          "resourceAttributes": {
+            "name": "projects/cloud-siem-detection-lab",
+            "service": "logging.googleapis.com",
+            "type": "cloudresourcemanager.googleapis.com/Project"
+          }
+        }
+      ]
+    }
+  }
+}
