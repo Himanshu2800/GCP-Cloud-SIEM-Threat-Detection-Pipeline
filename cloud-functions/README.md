@@ -1,4 +1,4 @@
-# log-normalizer
+# Log-normalizer
 
 Cloud Run function that processes GCP audit logs from Pub/Sub.
 
