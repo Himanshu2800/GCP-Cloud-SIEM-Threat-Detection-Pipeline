@@ -1,3 +1,49 @@
+import logging
+from copy import deepcopy
+
+logger = logging.getLogger(__name__)
+
+# Detection rules mapped to MITRE ATT&CK
+# (unchanged from original main.py)
+DETECTION_RULES = [
+    {
+        "name": "GCP VM Instance Deleted",
+        "field": "action",
+        "contains": "compute.instances.delete",
+        "severity": "MEDIUM",
+        "mitre": "T1485"
+    },
+    {
+        "name": "GCP IAM Policy Modified",
+        "field": "action",
+        "contains": "setIamPolicy",
+        "severity": "HIGH",
+        "mitre": "T1078"
+    },
+    {
+        "name": "GCP Firewall Rule Deleted",
+        "field": "action",
+        "contains": "firewalls.delete",
+        "severity": "HIGH",
+        "mitre": "T1562.007"
+    },
+    {
+        "name": "GCP Service Account Key Created",
+        "field": "action",
+        "contains": "CreateServiceAccountKey",
+        "severity": "HIGH",
+        "mitre": "T1098.001"
+    },
+    {
+        "name": "GCP Storage Bucket Permissions Modified",
+        "field": "action",
+        "contains": "storage.setIamPermissions",
+        "severity": "HIGH",
+        "mitre": "T1530"
+    }
+]
+
+
 def run_detections(normalized):
     """
     Evaluate a normalized event against DETECTION_RULES.
@@ -16,7 +62,7 @@ def run_detections(normalized):
                 "rule_name": rule["name"],
                 "mitre_technique": rule["mitre"],
                 "severity": rule["severity"],
-                "event": normalized,
+                "event": deepcopy(normalized),
             }
             hits.append(finding)
     return hits
