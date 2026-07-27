@@ -1,0 +1,26 @@
+title: GCP Firewall Rule Deleted
+id: c3d4e5f6-a7b8-9012-cdef-123456789012
+status: experimental
+description: Detects deletion of a GCP firewall rule which may indicate defense evasion or an attacker opening network access
+author: Himanshu
+date: 2026/07/08
+logsource:
+    category: cloud
+    product: gcp
+    service: audit
+detection:
+    selection:
+        action|contains: 'firewalls.delete'
+    condition: selection
+falsepositives:
+    - Legitimate firewall rule cleanup
+    - Infrastructure changes by admins
+level: high
+tags:
+    - attack.defense_evasion
+    - attack.t1562.007
+fields:
+    - actor
+    - action
+    - resource
+    - source_ip
