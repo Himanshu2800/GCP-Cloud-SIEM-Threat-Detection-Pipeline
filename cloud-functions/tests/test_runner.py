@@ -32,13 +32,15 @@ def _locate_detector_dir():
         return PROJECT_ROOT
 
     matches = list(PROJECT_ROOT.rglob("detector.py"))
-    # Ignore anything under tests/ itself or virtual envs/caches.
+    # Ignore anything under tests/, hidden directories (.venv, .cache,
+    # .git, ...), and installed-package locations — only project
+    # source should be considered a candidate.
     matches = [
         m for m in matches
         if "tests" not in m.parts
         and "venv" not in m.parts
-        and ".venv" not in m.parts
         and "site-packages" not in m.parts
+        and not any(part.startswith(".") for part in m.parts)
     ]
 
     if len(matches) == 1:
@@ -133,7 +135,8 @@ def validate_expectation_shape(test_case_filename, expected):
 def load_event(test_case_filename):
     path = TEST_CASES_DIR / test_case_filename
     try:
-      json.loads(path.read_text(encoding="utf-8"))
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
     except json.JSONDecodeError as e:
         raise TestFrameworkError(f"{test_case_filename} is not valid JSON: {e}")
 
