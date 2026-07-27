@@ -1,1 +1,56 @@
-{}
+{
+    "vm_instance_deleted.json": {
+        "description": "VM deletion by an external actor should trigger T1485",
+        "expected_findings": [
+            {
+                "rule_name": "GCP VM Instance Deleted",
+                "mitre_technique": "T1485",
+                "severity": "MEDIUM"
+            }
+        ]
+    },
+    "iam_policy_modified.json": {
+        "description": "IAM policy change should trigger T1078",
+        "expected_findings": [
+            {
+                "rule_name": "GCP IAM Policy Modified",
+                "mitre_technique": "T1078",
+                "severity": "HIGH"
+            }
+        ]
+    },
+    "firewall_rule_deleted.json": {
+        "description": "Firewall rule deletion should trigger T1562.007",
+        "expected_findings": [
+            {
+                "rule_name": "GCP Firewall Rule Deleted",
+                "mitre_technique": "T1562.007",
+                "severity": "HIGH"
+            }
+        ]
+    },
+    "sa_key_created.json": {
+        "description": "Service account key creation should trigger T1098.001",
+        "expected_findings": [
+            {
+                "rule_name": "GCP Service Account Key Created",
+                "mitre_technique": "T1098.001",
+                "severity": "HIGH"
+            }
+        ]
+    },
+    "bucket_permissions_modified.json": {
+        "description": "Storage bucket IAM permission change should trigger T1530",
+        "expected_findings": [
+            {
+                "rule_name": "GCP Storage Bucket Permissions Modified",
+                "mitre_technique": "T1530",
+                "severity": "HIGH"
+            }
+        ]
+    },
+    "benign_vm_list.json": {
+        "description": "Read-only list action by a service account should not trigger any rule",
+        "expected_findings": []
+    }
+}
