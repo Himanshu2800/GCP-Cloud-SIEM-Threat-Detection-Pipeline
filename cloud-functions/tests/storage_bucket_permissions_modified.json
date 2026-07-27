@@ -1,0 +1,9 @@
+{
+    "timestamp": "2026-07-20T13:21:08.556Z",
+    "actor": "attacker@example.com",
+    "action": "storage.setIamPermissions",
+    "resource": "projects/_/buckets/cloud-siem-audit-logs",
+    "source_ip": "203.0.113.198",
+    "log_source": "storage.googleapis.com",
+    "severity": "NOTICE"
+}
