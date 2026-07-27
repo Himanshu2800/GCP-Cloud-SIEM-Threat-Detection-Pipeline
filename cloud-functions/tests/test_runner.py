@@ -57,10 +57,18 @@ def _locate_detector_dir():
 sys.path.insert(0, str(_locate_detector_dir()))
 
 from detector import run_detections  # noqa: E402
+from rule_loader import load_rules  # noqa: E402
 
 TESTS_DIR = Path(__file__).resolve().parent
 TEST_CASES_DIR = TESTS_DIR / "test_cases"
 EXPECTED_RESULTS_PATH = TESTS_DIR / "expected_results.json"
+
+# Loaded once at module level, same as main.py's RULES = load_rules() at
+# process startup — not reloaded per test. If this is empty, every test
+# expecting a finding will legitimately fail (that's correct behavior:
+# it means your detections/ folder has no valid rules, which is itself
+# something this suite should catch, not hide).
+RULES = load_rules()
 
 # The fields a finding is judged on. Extend this tuple (e.g. add
 # "confidence", "tactic", "rule_id") as run_detections()'s finding
@@ -172,7 +180,7 @@ def diff_findings(expected_reduced, actual_reduced):
 def run_single_test(test_case_filename, expected):
     validate_expectation_shape(test_case_filename, expected)
     event = load_event(test_case_filename)
-    actual_findings = run_detections(event)
+    actual_findings = run_detections(event, RULES)
 
     actual_reduced = normalize_findings(actual_findings)
     expected_reduced = normalize_findings(expected["expected_findings"])
@@ -196,6 +204,11 @@ def main():
         sys.exit(2)
 
     runnable = reconcile_fixtures_and_expectations(fixture_files, expected_results)
+
+    if not RULES:
+        print("WARNING: zero rules loaded from detections/ — every test "
+              "expecting a finding will fail, and negative tests will "
+              "pass for the wrong reason (nothing can fire).")
 
     print("\nRunning detection tests...\n")
 
