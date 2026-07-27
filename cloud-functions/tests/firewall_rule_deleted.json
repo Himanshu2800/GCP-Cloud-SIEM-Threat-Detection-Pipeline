@@ -1,0 +1,9 @@
+{
+    "timestamp": "2026-07-20T11:47:55.902Z",
+    "actor": "attacker@example.com",
+    "action": "v1.compute.firewalls.delete",
+    "resource": "projects/cloud-siem-detection-lab/global/firewalls/allow-internal-only",
+    "source_ip": "203.0.113.77",
+    "log_source": "compute.googleapis.com",
+    "severity": "NOTICE"
+}
