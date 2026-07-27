@@ -4,23 +4,15 @@ status: experimental
 description: Detects deletion of a GCP firewall rule which may indicate defense evasion or an attacker opening network access
 author: Himanshu
 date: 2026/07/08
-logsource:
-    category: cloud
-    product: gcp
-    service: audit
-detection:
-    selection:
-        action|contains: 'firewalls.delete'
-    condition: selection
-falsepositives:
-    - Legitimate firewall rule cleanup
-    - Infrastructure changes by admins
-level: high
-tags:
-    - attack.defense_evasion
-    - attack.t1562.007
-fields:
-    - actor
-    - action
-    - resource
-    - source_ip
+
+severity: HIGH
+
+mitre:
+  technique: T1562.007
+
+condition_logic: AND
+
+conditions:
+  - field: action
+    operator: contains
+    value: firewalls.delete
