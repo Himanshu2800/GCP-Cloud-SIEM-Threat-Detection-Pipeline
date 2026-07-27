@@ -1,0 +1,9 @@
+{
+    "timestamp": "2026-07-20T14:32:10.481Z",
+    "actor": "attacker@example.com",
+    "action": "v1.compute.instances.delete",
+    "resource": "projects/cloud-siem-detection-lab/zones/asia-south2-a/instances/prod-web-01",
+    "source_ip": "203.0.113.45",
+    "log_source": "compute.googleapis.com",
+    "severity": "NOTICE"
+}
