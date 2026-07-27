@@ -4,23 +4,15 @@ status: experimental
 description: Detects IAM permission changes on GCP Cloud Storage buckets which may indicate data exfiltration attempts via public bucket exposure
 author: Himanshu
 date: 2026/07/08
-logsource:
-    category: cloud
-    product: gcp
-    service: audit
-detection:
-    selection:
-        action|contains: 'storage.setIamPermissions'
-    condition: selection
-falsepositives:
-    - Legitimate bucket permission management
-    - Automated deployment pipelines
-level: high
-tags:
-    - attack.exfiltration
-    - attack.t1530
-fields:
-    - actor
-    - action
-    - resource
-    - source_ip
+
+severity: HIGH
+
+mitre:
+  technique: T1530
+
+condition_logic: AND
+
+conditions:
+  - field: action
+    operator: contains
+    value: storage.setIamPermissions
