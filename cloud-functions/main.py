@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 RULES = load_rules()
 if not RULES:
-    logger.warning("No detection rules loaded -- detector will not fire on any event")
+    logger.warning("No detection rules loaded, detector will not fire on any event")
 
 EVENT_HISTORY = EventHistory()
 SEEN_CORRELATIONS = set()
@@ -36,13 +36,13 @@ def handle_pubsub_push():
     correlated = run_correlations(hits, EVENT_HISTORY, SEEN_CORRELATIONS)
 
     # Raw event is always indexed, regardless of whether any rule
-    # fired -- so "OpenSearch: always" holds for every severity,
-    # including no-detection events, without needing a routing
+    # fired, so "OpenSearch: always" holds for every severity,
+    # including no detection events, without needing a routing
     # decision for it.
     index_document(enriched, doc_type="raw_event")
 
     for finding in hits:
-        # Previously, detection findings were never indexed at all --
+        # Previously, detection findings were never indexed at all,
         # only alerted. That meant OpenSearch had no record a rule
         # had ever fired. Fixed as part of the Day 11 schema review.
         index_document(finding, doc_type="detection")
