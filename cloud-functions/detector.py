@@ -6,13 +6,25 @@ logger = logging.getLogger(__name__)
 SUPPORTED_OPERATORS = {"contains", "equals", "not_contains"}
 
 
+def _mask_actor(actor):
+    """Mask an email or username for logging, keep only the first two characters visible."""
+    if not actor or actor == "unknown":
+        return actor
+    if "@" in actor:
+        name, domain = actor.split("@", 1)
+        visible = name[:2]
+        return f"{visible}{'*' * max(len(name) - 2, 3)}@{domain}"
+    visible = actor[:2]
+    return f"{visible}{'*' * max(len(actor) - 2, 3)}"
+
+
 def evaluate_condition(condition, normalized):
     field = condition.get("field")
     operator = condition.get("operator")
     value = condition.get("value")
 
     if field is None or operator is None or value is None:
-        logger.warning(f"Malformed condition {condition} — treating as False")
+        logger.warning(f"Malformed condition {condition}, treating as False")
         return False
 
     field_value = normalized.get(field)
@@ -21,8 +33,8 @@ def evaluate_condition(condition, normalized):
 
     if operator not in SUPPORTED_OPERATORS:
         logger.warning(
-            f"Unsupported operator '{operator}' in condition {condition} "
-            f"— treating condition as False"
+            f"Unsupported operator '{operator}' in condition {condition}, "
+            f"treating condition as False"
         )
         return False
 
@@ -52,14 +64,18 @@ def run_detections(normalized, rules):
         else:
             logger.warning(
                 f"Unsupported condition_logic '{rule['condition_logic']}' "
-                f"in rule '{rule['title']}' — skipping rule"
+                f"in rule '{rule['title']}', skipping rule"
             )
             rule_matched = False
 
         if rule_matched:
             mitre_technique = rule["mitre"]["technique"]
-            logger.info(f"DETECTION HIT: {rule['title']} ({mitre_technique})")
+            masked_actor = _mask_actor(normalized.get("actor", "unknown"))
+            logger.info(
+                f"DETECTION HIT: {rule['rule_id']} ({mitre_technique}), actor={masked_actor}"
+            )
             finding = {
+                "rule_id": rule["rule_id"],
                 "rule_name": rule["title"],
                 "mitre_technique": mitre_technique,
                 "severity": rule["severity"],
