@@ -6,20 +6,12 @@ logger = logging.getLogger(__name__)
 
 def send_slack_alert(finding, normalized):
     """
-    Send a formatted Slack alert for a detection or correlation hit.
+    Send a Slack alert for a detection or correlation hit.
 
-    finding: a finding dict as produced by run_detections() --
-        {"rule_name": ..., "mitre_technique": ..., "severity": ..., ...}
-        (BUGFIX: this previously read rule["name"] / rule["mitre"],
-        which matched the pre-Day-1-refactor hardcoded rule dict shape,
-        not the finding shape run_detections() has produced since.
-        Every call was throwing KeyError before ever reaching the
-        network request -- confirmed by reproducing the crash before
-        this fix.)
-
-    Same message layout, fixed red attachment color, 5s timeout,
-    swallow-and-log-on-failure behavior as before -- only the field
-    names read off `finding` changed to match reality.
+    Bugfix: this used to read rule["name"] / rule["mitre"], which
+    doesn't match what run_detections() actually returns anymore,
+    so every call crashed with a KeyError before it even hit the
+    network. Now reads the correct finding fields.
     """
     message = {
         "text": ":rotating_light: *DETECTION ALERT*",
@@ -41,6 +33,6 @@ def send_slack_alert(finding, normalized):
     }
     try:
         response = requests.post(SLACK_WEBHOOK_URL, json=message, timeout=5)
-        logger.info(f"Slack response: {response.status_code} - {response.text}")
+        logger.info(f"Slack response: {response.status_code}, {response.text}")
     except Exception as e:
         logger.error(f"Slack error: {e}")
