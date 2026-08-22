@@ -6,13 +6,13 @@ logger = logging.getLogger(__name__)
 
 
 class NormalizationError(Exception):
-    """Raised when an incoming envelope/log can't be decoded or normalized."""
+    """Raised when an incoming envelope or log can't be decoded or normalized."""
     pass
 
 
 def decode_pubsub_envelope(envelope: dict) -> dict:
     """
-    Decode the base64-encoded 'data' field of a Pub/Sub push envelope
+    Decode the base64 encoded 'data' field of a Pub/Sub push envelope
     into the raw GCP Cloud Audit Log JSON.
     """
     if not envelope or "message" not in envelope:
@@ -57,9 +57,9 @@ def normalize_gcp_log(log: dict) -> dict:
 
 def normalize_event(envelope: dict) -> dict:
     """
-    Full pipeline entrypoint: envelope -> decoded log -> normalized event.
-    Raises NormalizationError on any failure so main.py can return
-    an appropriate HTTP status without crashing.
+    Full pipeline entrypoint: envelope becomes decoded log becomes
+    normalized event. Raises NormalizationError on any failure so
+    main.py can return an appropriate HTTP status without crashing.
     """
     log = decode_pubsub_envelope(envelope)
     return normalize_gcp_log(log)
