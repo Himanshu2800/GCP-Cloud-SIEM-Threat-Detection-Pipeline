@@ -1,6 +1,15 @@
 # GCP Cloud SIEM — Threat Detection Pipeline
 
-A cloud-native Security Information and Event Management (SIEM) system built entirely on GCP. Ingests logs from Cloud Audit, VPC Flow, Firewall, and GKE sources, normalizes and enriches them, runs Sigma detection rules mapped to MITRE ATT&CK, and delivers real-time alerts to Slack/PagerDuty with a Grafana dashboard for SOC analysts.
+A cloud-native detection-engineering pipeline built on GCP. Cloud Audit Log
+events flow through Pub/Sub into a Cloud Run service that normalizes,
+enriches, and evaluates them against YAML detection rules, correlates
+related findings across a short time window, indexes everything into
+OpenSearch, and routes alerts to Slack/PagerDuty. A Grafana dashboard
+sits on top for SOC-style triage.
+
+This is a portfolio / detection-engineering project, not a production
+SIEM. See [Known limitations](#known-limitations) below for what that
+means concretely.
 
 ---
 
@@ -8,110 +17,142 @@ A cloud-native Security Information and Event Management (SIEM) system built ent
 
 <img width="1024" height="1536" alt="image" src="https://github.com/user-attachments/assets/18d17996-9ab7-43a3-b753-8288ccead077" />
 
-
----
-
-## Features
-
-- **Multi-source log ingestion** — Cloud Audit (admin + data access), VPC Flow, Firewall rules, GKE workloads, and IAM events
-- **Normalized event schema** — all sources flattened into a common structure for consistent querying
-- **Sigma-based detections** — 10+ production-grade rules covering privilege escalation, exfiltration, defense evasion, and lateral movement
-- **MITRE ATT&CK mapping** — every detection tagged with technique IDs (e.g. T1098, T1537)
-- **Real-time alerting** — Slack messages and PagerDuty incidents fire within seconds of detection
-- **Grafana SOC dashboard** — events per hour, top principals, alert timeline, detection heatmap by tactic
-- **Infrastructure as code** — entire GCP setup provisioned with Terraform
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Log sources | GCP Cloud Logging (Audit, VPC Flow, Firewall, GKE) |
-| Ingestion | Cloud Pub/Sub |
-| Processing | Cloud Functions (Python 3.11) |
-| Detection | Sigma rules + `sigma-cli` |
-| Storage | OpenSearch 2.x (self-hosted on GCE) |
-| Alerting | Slack Webhooks, PagerDuty Events API v2 |
-| Dashboard | Grafana 10 + OpenSearch data source |
-| Infra | Terraform 1.6+ |
-| CI/CD | GitHub Actions |
-
----
-
-## Repository Structure
-
 ```
-gcp-siem/
-├── terraform/
-│   ├── main.tf               # Core GCP resources
-│   ├── pubsub.tf             # Pub/Sub topic + subscription
-│   ├── log_sinks.tf          # Cloud Logging sinks → Pub/Sub
-│   ├── cloud_function.tf     # Function deployment config
-│   ├── iam.tf                # Service account + IAM bindings
-│   └── variables.tf
-│
-├── functions/
-│   ├── processor/
-│   │   ├── main.py           # Entry point — pull, normalize, detect, index
-│   │   ├── normalizer.py     # Raw GCP log → common schema
-│   │   ├── detector.py       # Sigma rule runner
-│   │   ├── enricher.py       # GeoIP, asset context
-│   │   ├── alerter.py        # Slack + PagerDuty dispatch
-│   │   └── requirements.txt
-│   └── tests/
-│       ├── test_normalizer.py
-│       ├── test_detector.py
-│       └── fixtures/         # Sample raw GCP log payloads
-│
-├── detections/               # Sigma rules (one file per detection)
-│   ├── gcp_iam_privilege_escalation.yml
-│   ├── gcp_service_account_key_created.yml
-│   ├── gcp_bucket_made_public.yml
-│   ├── gcp_firewall_rule_deleted.yml
-│   ├── gcp_impossible_travel.yml
-│   ├── gcp_excessive_api_calls.yml
-│   ├── gcp_new_region_compute.yml
-│   ├── gcp_iam_policy_on_non_ci_principal.yml
-│   ├── gcp_data_exfil_large_object_download.yml
-│   └── gcp_service_account_impersonation.yml
-│
-├── dashboards/
-│   └── grafana_siem_dashboard.json   # Import-ready Grafana JSON
-│
-├── opensearch/
-│   └── index_template.json           # Field mappings for normalized events
-│
-├── scripts/
-│   ├── bootstrap.sh          # First-time setup helper
-│   └── test_detection.py     # Fire a synthetic event to test end-to-end
-│
-├── docs/
-│   ├── detections.md         # Full write-up of each rule + MITRE mapping
-│   ├── setup_gcp.md          # GCP project prerequisites
-│   └── runbook.md            # How to triage an alert
-│
-└── README.md
+GCP Cloud Audit Logs (activity + data_access)
+        │
+        ▼
+  Cloud Logging Sink  ──▶  Pub/Sub topic  ──▶  Pub/Sub push subscription
+                                                       │
+                                                       ▼
+                                        Cloud Run service (Flask, cloud-functions/)
+                                        normalize → enrich → detect → correlate
+                                                       │
+                              ┌────────────────────────┼───────────────────────┐
+                              ▼                         ▼                       ▼
+                        OpenSearch index         Slack / PagerDuty      Grafana dashboard
+                        (raw + detections +          alert_router.py     (reads OpenSearch)
+                         correlations)
 ```
+
+---
+
+## What's actually in this repo
+
+- **Log source**: GCP Cloud Audit Logs (admin activity + data access) only.
+  There is no VPC Flow Log or GKE audit log normalization implemented —
+  the normalizer (`normalizer.py`) reads `protoPayload` fields specific to
+  Cloud Audit Logs.
+- **5 detection rules** (`cloud-functions/detections/*.yml`), each mapped
+  to a MITRE ATT&CK technique — see the table below. Each rule has a
+  stable `rule_id` (e.g. `GCP_VM_INSTANCE_DELETED`) independent of its
+  human-readable `title`, so renaming a rule's display text never changes
+  its identity for correlation sequences, test fixtures, or anything else
+  keyed on it. `rule_loader.py` validates `rule_id` is UPPER_SNAKE_CASE
+  and unique across all loaded rules.
+- **A custom, Sigma-inspired rule engine** (`detector.py` + `rule_loader.py`),
+  not `sigma-cli`. Rules support `condition_logic: AND/OR` over a list of
+  `conditions`, each using one of three operators: `contains`, `equals`,
+  `not_contains`. `sigma-rules/` additionally holds true Sigma-syntax
+  versions of the same 5 detections, kept for portability/documentation —
+  the engine itself only reads `cloud-functions/detections/`.
+- **A correlation engine** (`correlation.py`) that chains two findings by
+  the same actor within a 15-minute window: IAM policy change → new
+  service-account key, and firewall rule deletion → VM deletion. State is
+  in-memory and process-local by design — this is documented in the code
+  itself as a portfolio-scope limitation, not something the code pretends
+  isn't there.
+- **A regression test suite** (`cloud-functions/tests/`): `test_runner.py`
+  checks 8 fixture events (5 rule-firing cases + 3 negative/benign cases)
+  against `expected_results.json`, and `test_correlation.py` separately
+  covers the correlation engine with 6 sequential-event scenarios (both
+  correlation rules firing, actor isolation, time-window enforcement, a
+  missing precursor, and dedup on event replay). Both run in CI on every
+  push/PR via `.github/workflows/tests.yml`.
+- **Terraform** for the GCP side (Pub/Sub, logging sink, and a GCE VM
+  running OpenSearch/OpenSearch Dashboards/Grafana in Docker) — see
+  `terraform/`.
 
 ---
 
 ## Detections
 
-All rules live in `detections/` as Sigma YAML. Each one is mapped to one or more MITRE ATT&CK techniques.
+| Rule file | rule_id | MITRE Technique | Severity | Description |
+|---|---|---|---|---|
+| `gcp-iam-privilege-escalation.yml` | `GCP_IAM_POLICY_MODIFIED` | T1078 | HIGH | IAM policy modified via `setIamPolicy` |
+| `gcp-service-account-key-created.yml` | `GCP_SERVICE_ACCOUNT_KEY_CREATED` | T1098.001 | HIGH | New service account key created |
+| `gcp-bucket-made-public.yml` | `GCP_BUCKET_PERMISSIONS_MODIFIED` | T1530 | HIGH | Storage bucket IAM permissions modified |
+| `gcp-firewall-rule-deleted.yml` | `GCP_FIREWALL_RULE_DELETED` | T1562.007 | HIGH | VPC firewall rule deleted |
+| `gcp-vm-instance-deleted.yml` | `GCP_VM_INSTANCE_DELETED` | T1485 | MEDIUM | Compute instance deleted |
 
-| Rule | MITRE Technique | Severity | Description |
+`rule_id` is the stable identity used by findings, correlation
+sequences, and test fixtures — `title` is display-only and can be
+renamed freely without breaking anything.
+
+Correlation rules (chained detections, see `correlation.py`) reference
+the steps above by `rule_id`:
+
+| Correlation | Sequence | Window | MITRE |
 |---|---|---|---|
-| `gcp_iam_privilege_escalation` | T1098 | Critical | IAM policy set by a non-CI/CD principal |
-| `gcp_service_account_key_created` | T1098.001 | High | New service account key created — persistent access vector |
-| `gcp_bucket_made_public` | T1537 | Critical | Cloud Storage bucket ACL changed to `allUsers` |
-| `gcp_firewall_rule_deleted` | T1562.004 | High | VPC firewall rule removed — potential defense evasion |
-| `gcp_impossible_travel` | T1078 | High | Same principal authenticated from two countries within 1 hour |
-| `gcp_excessive_api_calls` | T1046 | Medium | >50 API calls from a single principal in a 60-second window |
-| `gcp_new_region_compute` | T1578 | Medium | Compute instance created in a region with no prior usage |
-| `gcp_iam_policy_on_non_ci_principal` | T1098 | High | SetIamPolicy called outside of known automation accounts |
-| `gcp_data_exfil_large_object_download` | T1530 | High | Large GCS object downloaded by an external IP |
-| `gcp_service_account_impersonation` | T1134 | High | `iam.serviceAccounts.actAs` granted to a user account |
+| Privilege Escalation via Key Creation | IAM Policy Modified → SA Key Created | 15 min | T1078 → T1098.001 |
+| Firewall Removal Before VM Destruction | Firewall Rule Deleted → VM Instance Deleted | 15 min | T1562.007 → T1485 |
+
+The T1078 mapping on IAM policy modification is a broad one (T1078 is
+"Valid Accounts") — a `setIamPolicy` call is better thought of as a
+precursor to privilege escalation/persistence than that technique itself.
+Worth treating as a starting point to refine rather than a settled
+mapping.
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Log source | GCP Cloud Audit Logs (admin activity + data access) |
+| Ingestion | Cloud Pub/Sub |
+| Processing | Cloud Run (Flask, Python) |
+| Detection | Custom Sigma-inspired YAML rule engine (not sigma-cli) |
+| Storage | OpenSearch (self-hosted on a GCE VM via Docker) |
+| Alerting | Slack webhook, PagerDuty Events API |
+| Dashboard | Grafana + OpenSearch data source |
+| Infra | Terraform |
+
+---
+
+## Repository structure
+
+```
+.
+├── terraform/
+│   ├── main.tf              # Pub/Sub topic/sub, logging sink, Cloud Run data source
+│   ├── compute.tf           # GCE VM running OpenSearch/Dashboards/Grafana in Docker
+│   ├── firewall.tf          # Firewall rules (SSH/Grafana restricted to admin_source_ranges)
+│   ├── vpc.tf, variables.tf, providers.tf, outputs.tf
+│   └── terraform.tfvars.example
+│
+├── cloud-functions/         # The Cloud Run service
+│   ├── main.py               # Flask entrypoint: Pub/Sub push handler
+│   ├── normalizer.py         # Cloud Audit Log JSON -> normalized event
+│   ├── enrichment.py         # resource_type, event_category, ip_classification, risk_score
+│   ├── detector.py           # Rule evaluator (AND/OR, contains/equals/not_contains)
+│   ├── rule_loader.py        # Loads + validates YAML rules from detections/
+│   ├── correlation.py        # Multi-event correlation (in-memory, actor-keyed)
+│   ├── opensearch_client.py  # Indexing
+│   ├── alert_router.py       # Routes findings to Slack/PagerDuty by severity
+│   ├── pagerduty.py, alerter.py, config.py
+│   ├── detections/           # 5 rules in the engine's own YAML format
+│   ├── requirements.txt      # flask, requests, urllib3, pyyaml
+│   └── tests/
+│       ├── test_runner.py       # single-event detection regression tests
+│       ├── test_correlation.py  # multi-event correlation regression tests
+│       ├── expected_results.json
+│       └── test_cases/       # 8 fixture events
+│
+├── sigma-rules/              # Same 5 detections in true Sigma syntax (reference only)
+├── docs/                     # Sample raw + normalized event JSON
+├── screenshots/              # OpenSearch/Grafana/detection screenshots
+└── LICENSE
+```
 
 ---
 
@@ -119,180 +160,137 @@ All rules live in `detections/` as Sigma YAML. Each one is mapped to one or more
 
 ### Prerequisites
 
-- GCP project with billing enabled
-- `gcloud` CLI authenticated (`gcloud auth application-default login`)
+- GCP project with billing enabled, `gcloud` authenticated
 - Terraform >= 1.6
 - Python 3.11+
-- OpenSearch instance running (see `docs/setup_gcp.md`)
+- Docker (runs on the provisioned GCE VM automatically via startup script)
 
-### 1. Clone and configure
-
-```bash
-git clone https://github.com/yourusername/gcp-siem.git
-cd gcp-siem
-cp terraform/variables.tf.example terraform/variables.tf
-# Edit variables.tf — fill in your project ID, region, Slack webhook URL
-```
-
-### 2. Provision GCP infrastructure
+### 1. Configure Terraform
 
 ```bash
 cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set project_id, and set admin_source_ranges to
+# YOUR IP (curl ifconfig.me) -- do not leave it as 0.0.0.0/0.
+```
+
+### 2. Provision infrastructure
+
+```bash
 terraform init
 terraform plan
 terraform apply
 ```
 
-This creates the log sinks, Pub/Sub topic and subscription, Cloud Function, and required IAM bindings.
-
-### 3. Deploy the processor function
-
-```bash
-cd functions/processor
-pip install -r requirements.txt
-gcloud functions deploy siem-processor \
-  --runtime python311 \
-  --trigger-topic siem-events \
-  --entry-point process_event \
-  --set-env-vars OPENSEARCH_HOST=<your-host>,SLACK_WEBHOOK=<your-webhook>
-```
-
-### 4. Import the Grafana dashboard
-
-In Grafana, go to Dashboards → Import → Upload JSON and select `dashboards/grafana_siem_dashboard.json`. Set the OpenSearch data source when prompted.
-
-### 5. Test end-to-end
+This creates the Pub/Sub topic/subscription, the Cloud Audit Log sink,
+and the GCE VM running OpenSearch, OpenSearch Dashboards, and Grafana.
+The OpenSearch admin password is generated at boot time (not hardcoded) —
+retrieve it with:
 
 ```bash
-python scripts/test_detection.py --rule gcp_bucket_made_public
-# Should fire within ~10 seconds in Slack
+gcloud compute ssh soc-lab-vpc --zone <your-zone> \
+  --command "sudo cat /opt/opensearch-admin-password.txt"
 ```
 
----
-
-## Normalized Event Schema
-
-Every log source is normalized to this common schema before detection and indexing:
-
-```json
-{
-  "timestamp": "2025-08-14T10:23:45Z",
-  "event_id": "uuid-v4",
-  "source": "cloudaudit",
-  "principal": "user@example.com",
-  "source_ip": "102.45.67.89",
-  "source_country": "NG",
-  "action": "storage.buckets.setIamPolicy",
-  "resource_type": "gcs_bucket",
-  "resource_name": "projects/my-project/buckets/prod-data",
-  "project_id": "my-project",
-  "severity": "WARNING",
-  "mitre_techniques": ["T1537"],
-  "mitre_tactics": ["exfiltration"],
-  "sigma_rule_id": "gcp_bucket_made_public",
-  "alert": true,
-  "raw": { ... }
-}
-```
-
----
-
-## Alert Example
-
-When a detection fires, Slack receives a structured message:
-
-```
-🚨 CRITICAL — GCP bucket made public
-─────────────────────────────────────
-Rule:       gcp_bucket_made_public
-MITRE:      T1537 — Transfer Data to Cloud Account
-Principal:  admin@example.com
-Resource:   gs://prod-data-backup
-Project:    my-gcp-project
-Source IP:  102.45.67.89 (Nigeria)
-Time:       2025-08-14 10:23:45 UTC
-
-[View in Dashboard]  [Open Runbook]
-```
-
----
-
-## Running Tests
+### 3. Deploy the Cloud Run service
 
 ```bash
-cd functions
-python -m pytest tests/ -v
+cd cloud-functions
+pip install -r requirements.txt --break-system-packages
+gcloud run deploy log-normalizer \
+  --source . \
+  --region <your-region> \
+  --set-env-vars OPENSEARCH_HOST=<vm-ip>,SLACK_WEBHOOK=<your-webhook>
 ```
 
-Test fixtures in `tests/fixtures/` contain real-shaped (anonymized) GCP log payloads for each source type so you can develop and test rules without a live GCP project.
+Point the Pub/Sub push subscription at the deployed Cloud Run URL.
+
+### 4. Import the Grafana dashboard / configure OpenSearch as needed
+
+See `docs/` for sample raw and normalized event payloads, and
+`screenshots/` for what the detections and dashboard look like once
+running.
 
 ---
 
-## Writing New Detections
+## Running tests
 
-Add a new Sigma rule to `detections/`:
+```bash
+cd cloud-functions
+pip install -r requirements.txt --break-system-packages
+python3 tests/test_runner.py       # single-event detection tests
+python3 tests/test_correlation.py  # multi-event correlation tests
+```
+
+Neither script needs GCP, Flask, or OpenSearch — both import the pure
+logic modules (`detector.py`, `rule_loader.py`, `correlation.py`) directly.
+
+`test_runner.py` runs 8 fixture events (5 that should fire a specific
+rule, 3 benign/read-only events that should fire nothing) and diffs the
+actual findings against `expected_results.json`.
+
+`test_correlation.py` feeds sequences of events through the correlation
+engine and checks: both correlation rules fire when their sequence
+happens for the same actor within the time window; correlation does
+NOT fire across different actors, outside the time window, or when only
+one step of a sequence occurs; and a replayed/duplicate event doesn't
+produce a second correlation for evidence already seen.
+
+---
+
+## Writing new detections
+
+Add a YAML file to `cloud-functions/detections/`:
 
 ```yaml
 title: GCP suspicious detection title
-id: <generate a UUID>
+rule_id: GCP_SUSPICIOUS_DETECTION_TITLE   # UPPER_SNAKE_CASE, unique, stable
+id: <uuid>
 status: experimental
-description: One sentence describing what this detects and why it matters.
-author: your-github-handle
-date: YYYY/MM/DD
-logsource:
-    product: gcp
-    service: cloudaudit         # or vpc_flow, firewall, gke
-detection:
-    selection:
-        action: 'MethodName'    # exact GCP API method
-    filter_known_good:
-        principal|contains: 'terraform-sa@'
-    condition: selection and not filter_known_good
-falsepositives:
-    - Legitimate automation via CI/CD pipelines
-level: high                    # informational, low, medium, high, critical
-tags:
-    - attack.tactic_name
-    - attack.T1XXX
+description: One sentence describing what this detects and why.
+author: your-handle
+date: YYYY-MM-DD
+severity: HIGH   # LOW, MEDIUM, HIGH, CRITICAL
+mitre:
+  technique: T1XXX
+condition_logic: AND   # or OR
+conditions:
+  - field: action
+    operator: contains   # contains, equals, or not_contains
+    value: some.method.Name
 ```
 
-Then run `python scripts/test_detection.py --rule <your_rule_filename>` to validate it fires on a synthetic matching event.
+`rule_loader.py` validates required fields (including that `rule_id` is
+UPPER_SNAKE_CASE and unique across all rules) and skips, with a logged
+error, any rule that's malformed rather than crashing the whole load.
+Add a matching fixture + expected-result entry (including the new
+`rule_id`) under `cloud-functions/tests/` to cover it in the regression
+suite — CI will run it automatically on the next push/PR.
 
 ---
 
-## Roadmap
+## Known limitations
 
-- [ ] Pub/Sub dead-letter queue for failed processing
-- [ ] Dataflow pipeline for high-volume environments (replace Cloud Function)
-- [ ] BigQuery sink for long-term log retention and threat hunting
-- [ ] Automated MITRE ATT&CK Navigator layer export from active detections
-- [ ] Slack bot for `/investigate <principal>` lookups from the alert message
-- [ ] Terraform module for multi-project log aggregation
-
----
-
-## Cost Estimate (small GCP project)
-
-| Resource | Estimated monthly cost |
-|---|---|
-| Cloud Logging + Log Sink | ~$0–$5 |
-| Pub/Sub | ~$0–$2 |
-| Cloud Functions (invocations) | ~$0–$3 |
-| GCE VM for OpenSearch (e2-standard-2) | ~$50–$70 |
-| Grafana (self-hosted on same VM) | $0 |
-| **Total** | **~$55–$80/month** |
-
-Use a `e2-micro` for dev/testing — OpenSearch will be slow but functional and drops cost to ~$10/month.
-
----
-
-## Resources
-
-- [Sigma rules documentation](https://github.com/SigmaHQ/sigma)
-- [MITRE ATT&CK — Cloud matrix](https://attack.mitre.org/matrices/enterprise/cloud/)
-- [GCP Cloud Logging log fields reference](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry)
-- [OpenSearch index mapping docs](https://opensearch.org/docs/latest/field-types/)
-- [GCP security best practices](https://cloud.google.com/security/best-practices)
+- **Detection operators are basic**: only `contains`, `equals`,
+  `not_contains`. No regex, field existence checks, numeric comparison,
+  or list matching yet.
+- **Correlation state is in-memory and process-local** — it does not
+  survive a Cloud Run cold start and is not shared across instances.
+  A production version would back this with Redis or Firestore. This
+  tradeoff is deliberate and documented in `correlation.py`.
+- **Only Cloud Audit Logs are ingested/normalized** — no VPC Flow Logs
+  or GKE audit logs yet, despite that being a natural next step.
+- **MITRE mappings are a first pass**, not a rigorously reviewed
+  mapping — see the note on T1078 above.
+- **Terraform has not been run through a live `terraform plan`/`apply`**
+  against a real GCP project as part of this repo's validation — the
+  `.tf` files have been manually cross-checked for duplicate resources,
+  undeclared variables, and broken references, but that's not a
+  substitute for an actual plan/apply cycle before you rely on it. The
+  Pub/Sub topic/subscription and logging sink are fully Terraform-owned
+  (created fresh on `apply`, not assumed to pre-exist); only the Cloud
+  Run service is intentionally external, since its container image is
+  deployed via `gcloud run deploy` rather than Terraform.
 
 ---
 
