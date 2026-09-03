@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: cloud-functions
+        run: pip install -r requirements.txt
+
+      - name: Run detection engine tests
+        working-directory: cloud-functions
+        run: python3 tests/test_runner.py
+
+      - name: Run correlation engine tests
+        working-directory: cloud-functions
+        run: python3 tests/test_correlation.py
