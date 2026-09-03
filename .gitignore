@@ -1,0 +1,30 @@
+# Terraform
+*.tfvars
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+
+# Secrets / environment
+.env
+.env.*
+*.pem
+*.key
+*_rsa
+*_rsa.pub
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
