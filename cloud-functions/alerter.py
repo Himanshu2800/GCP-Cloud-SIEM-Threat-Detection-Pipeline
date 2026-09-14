@@ -3,16 +3,8 @@ import requests
 from config import SLACK_WEBHOOK_URL
 logger = logging.getLogger(__name__)
 
-
 def send_slack_alert(finding, normalized):
-    """
-    Send a Slack alert for a detection or correlation hit.
 
-    Bugfix: this used to read rule["name"] / rule["mitre"], which
-    doesn't match what run_detections() actually returns anymore,
-    so every call crashed with a KeyError before it even hit the
-    network. Now reads the correct finding fields.
-    """
     message = {
         "text": ":rotating_light: *DETECTION ALERT*",
         "attachments": [
