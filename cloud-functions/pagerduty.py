@@ -4,8 +4,6 @@ from config import PAGERDUTY_ROUTING_KEY, PAGERDUTY_EVENTS_URL
 
 logger = logging.getLogger(__name__)
 
-# Map this project's severity vocabulary onto PagerDuty Events API v2's
-# fixed four level severity enum.
 SEVERITY_MAP = {
     "LOW": "info",
     "MEDIUM": "warning",
@@ -15,7 +13,6 @@ SEVERITY_MAP = {
 
 
 def _mask_actor(actor):
-    """Mask an email or username, keep only the first two characters visible."""
     if not actor or actor == "unknown":
         return actor
     if "@" in actor:
@@ -27,7 +24,6 @@ def _mask_actor(actor):
 
 
 def _mask_ip(ip):
-    """Mask the last octet of an IPv4 address, e.g. 10.0.0.42 becomes 10.0.0.xxx"""
     if not ip or ip == "unknown":
         return ip
     parts = str(ip).split(".")
@@ -37,23 +33,6 @@ def _mask_ip(ip):
 
 
 def send_pagerduty_alert(finding, normalized):
-    """
-    Trigger a PagerDuty incident via the Events API v2.
-
-    Graceful degradation: if PAGERDUTY_ROUTING_KEY isn't configured,
-    this logs a warning and returns without attempting the request,
-    an unset integration key is a valid, expected deployment state
-    (not every environment running this project has a real PagerDuty
-    account), not an error condition to raise on.
-
-    Network and API failures during the actual request are caught and
-    logged the same way opensearch_client.py and alerter.py already
-    handle their own failures: never raises, never blocks the rest of
-    the pipeline.
-
-    Sensitive fields (actor, source IP) are masked before being sent
-    out to PagerDuty, since this payload leaves our infra.
-    """
     if not PAGERDUTY_ROUTING_KEY:
         logger.warning(
             f"PagerDuty routing key not configured, skipping page for "
