@@ -34,17 +34,9 @@ def handle_pubsub_push():
 
     hits = run_detections(enriched, RULES)
     correlated = run_correlations(hits, EVENT_HISTORY, SEEN_CORRELATIONS)
-
-    # Raw event is always indexed, regardless of whether any rule
-    # fired, so "OpenSearch: always" holds for every severity,
-    # including no detection events, without needing a routing
-    # decision for it.
     index_document(enriched, doc_type="raw_event")
 
     for finding in hits:
-        # Previously, detection findings were never indexed at all,
-        # only alerted. That meant OpenSearch had no record a rule
-        # had ever fired. Fixed as part of the Day 11 schema review.
         index_document(finding, doc_type="detection")
         route_alert(finding, enriched)
 
