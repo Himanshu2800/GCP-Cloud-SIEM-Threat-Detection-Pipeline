@@ -1,0 +1,9 @@
+{
+    "timestamp": "2026-07-20T14:40:02.113Z",
+    "actor": "monitoring@cloud-siem-detection-lab.iam.gserviceaccount.com",
+    "action": "v1.compute.instances.list",
+    "resource": "projects/cloud-siem-detection-lab/zones/asia-south2-a/instances",
+    "source_ip": "10.0.0.5",
+    "log_source": "compute.googleapis.com",
+    "severity": "INFO"
+}

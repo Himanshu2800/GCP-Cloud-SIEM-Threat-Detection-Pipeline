@@ -38,11 +38,12 @@ GCP Cloud Audit Logs (activity + data_access)
 
 ## What's actually in this repo
 
-- **Log source**: GCP Cloud Audit Logs (admin activity + data access) only.
-  There is no VPC Flow Log or GKE audit log normalization implemented —
-  the normalizer (`normalizer.py`) reads `protoPayload` fields specific to
-  Cloud Audit Logs.
-- **5 detection rules** (`cloud-functions/detections/*.yml`), each mapped
+- **Log sources**: GCP Cloud Audit Logs (admin activity + data access) and
+  VPC Flow Logs. `normalizer.py` reads `protoPayload` for audit logs and
+  `jsonPayload.connection` for flow logs, mapping both to the same flat
+  schema (flow logs add `dest_ip`, `dest_port`, `bytes_sent`, `reporter`).
+  There is no GKE audit log normalization implemented.
+- **6 detection rules** (`cloud-functions/detections/*.yml`), each mapped
   to a MITRE ATT&CK technique — see the table below. Each rule has a
   stable `rule_id` (e.g. `GCP_VM_INSTANCE_DELETED`) independent of its
   human-readable `title`, so renaming a rule's display text never changes
@@ -83,6 +84,7 @@ GCP Cloud Audit Logs (activity + data_access)
 | `gcp-bucket-made-public.yml` | `GCP_BUCKET_PERMISSIONS_MODIFIED` | T1530 | HIGH | Storage bucket IAM permissions modified |
 | `gcp-firewall-rule-deleted.yml` | `GCP_FIREWALL_RULE_DELETED` | T1562.007 | HIGH | VPC firewall rule deleted |
 | `gcp-vm-instance-deleted.yml` | `GCP_VM_INSTANCE_DELETED` | T1485 | MEDIUM | Compute instance deleted |
+| `gcp-large-egress-public-ip.yml` | `GCP_LARGE_EGRESS_PUBLIC_IP` | T1048 | HIGH | Single VPC flow record sending over 100 MB to a public IP |
 
 `rule_id` is the stable identity used by findings, correlation
 sequences, and test fixtures — `title` is display-only and can be
@@ -272,14 +274,21 @@ suite — CI will run it automatically on the next push/PR.
 ## Known limitations
 
 - **Detection operators are basic**: only `contains`, `equals`,
-  `not_contains`. No regex, field existence checks, numeric comparison,
-  or list matching yet.
+  `not_contains` and `greater_than` (numeric). No regex, field existence
+  checks, or list matching yet.
 - **Correlation state is in-memory and process-local** — it does not
   survive a Cloud Run cold start and is not shared across instances.
   A production version would back this with Redis or Firestore. This
   tradeoff is deliberate and documented in `correlation.py`.
-- **Only Cloud Audit Logs are ingested/normalized** — no VPC Flow Logs
-  or GKE audit logs yet, despite that being a natural next step.
+- **Flow log detection is minimal**: one single-record rule (large egress
+  to a public IP). Port-scan and beaconing detection need aggregation
+  across records and are not implemented. The 100 MB threshold is
+  untuned, and traffic to Google APIs via Private Google Access uses
+  public IP ranges, so expect to tune for false positives. GKE audit
+  logs are still not normalized.
+- **Feedback-loop guard**: the logging sink excludes flow records on
+  port 9200 so the pipeline's own OpenSearch traffic is not re-ingested.
+  That filter change has not been through `terraform plan`.
 - **MITRE mappings are a first pass**, not a rigorously reviewed
   mapping — see the note on T1078 above.
 - **Terraform has not been run through a live `terraform plan`/`apply`**

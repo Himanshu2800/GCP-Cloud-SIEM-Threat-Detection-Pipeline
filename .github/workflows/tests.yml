@@ -30,3 +30,7 @@ jobs:
       - name: Run correlation engine tests
         working-directory: cloud-functions
         run: python3 tests/test_correlation.py
+
+      - name: Run VPC flow log tests
+        working-directory: cloud-functions
+        run: python3 tests/test_flow_logs.py

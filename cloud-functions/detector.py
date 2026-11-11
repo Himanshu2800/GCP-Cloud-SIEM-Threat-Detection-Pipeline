@@ -3,7 +3,7 @@ from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_OPERATORS = {"contains", "equals", "not_contains"}
+SUPPORTED_OPERATORS = {"contains", "equals", "not_contains", "greater_than"}
 
 
 def _mask_actor(actor):
@@ -37,6 +37,13 @@ def evaluate_condition(condition, normalized):
             f"treating condition as False"
         )
         return False
+
+    if operator == "greater_than":
+        # Numeric comparison; a non-numeric field or value never matches.
+        try:
+            return float(field_value) > float(value)
+        except (TypeError, ValueError):
+            return False
 
     field_value = str(field_value).lower()
     value = str(value).lower()

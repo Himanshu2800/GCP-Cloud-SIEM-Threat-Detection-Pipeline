@@ -1,0 +1,31 @@
+title: GCP Large Egress to Public IP
+id: 7d1f3c52-8a4e-4b9a-9c6e-2f5b1a0d4e73
+rule_id: GCP_LARGE_EGRESS_PUBLIC_IP
+status: experimental
+description: Detects a single VPC flow record where a VM sent a large amount of data to a public IP, which may indicate data exfiltration
+author: Himanshu
+date: 2026/11/11
+
+severity: HIGH
+
+mitre:
+  technique: T1048
+
+condition_logic: AND
+
+# Flow records are aggregated every 5 seconds and sampled (see terraform/vpc.tf),
+# so 100 MB in one record is a lot. Tune the threshold for your environment.
+# reporter=SRC avoids counting the same connection twice (SRC and DEST both log it).
+conditions:
+  - field: action
+    operator: equals
+    value: vpc_flow
+  - field: reporter
+    operator: equals
+    value: SRC
+  - field: dest_ip_classification
+    operator: equals
+    value: public
+  - field: bytes_sent
+    operator: greater_than
+    value: 104857600

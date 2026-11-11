@@ -60,9 +60,15 @@ resource "google_logging_project_sink" "siem_sink" {
   project     = var.project_id
   destination = "pubsub.googleapis.com/${google_pubsub_topic.siem_events.id}"
 
-  # Adjust this filter to match whatever log types your SIEM actually
-  # ingests today (e.g. narrow to specific services/severities as needed).
-  filter = "logName:\"cloudaudit.googleapis.com\""
+  filter = <<-EOT
+    log_id("cloudaudit.googleapis.com/activity") OR
+    log_id("cloudaudit.googleapis.com/data_access") OR
+    (
+      log_id("compute.googleapis.com/vpc_flows") AND
+      NOT jsonPayload.connection.dest_port=9200 AND
+      NOT jsonPayload.connection.src_port=9200
+    )
+  EOT
 
   unique_writer_identity = true
 }
