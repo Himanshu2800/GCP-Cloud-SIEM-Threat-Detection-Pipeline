@@ -1,12 +1,4 @@
-"""
-VPC Flow Log tests: normalizer -> enrichment -> detector, end to end.
 
-Independent of Flask, GCP, Pub/Sub and OpenSearch. Wraps the sample flow
-log in a Pub/Sub push envelope exactly as main.py receives it.
-
-Usage:
-    python tests/test_flow_logs.py
-"""
 import base64
 import copy
 import json
@@ -109,15 +101,22 @@ TESTS = [
 def main():
     print("\nRunning VPC flow log tests...\n")
     passed = 0
+
     for label, fn in TESTS:
         try:
             ok = bool(fn())
-        except Exception as exc:  # a crash is a failure, not a pass
+        except Exception as exc:
             ok = False
             print(f"    exception: {exc!r}")
+
         passed += ok
         dots = "." * max(3, 48 - len(label))
-        print(f"{'\u2713' if ok else '\u2717'} {label} {dots} {'PASSED' if ok else 'FAILED'}")
+
+        symbol = "\u2713" if ok else "\u2717"
+        status = "PASSED" if ok else "FAILED"
+
+        print(f"{symbol} {label} {dots} {status}")
+
     print(f"\n{passed}/{len(TESTS)} tests passed")
     sys.exit(0 if passed == len(TESTS) else 1)
 

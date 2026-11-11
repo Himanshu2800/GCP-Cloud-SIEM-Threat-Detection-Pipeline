@@ -32,3 +32,8 @@ variable "cloud_run_service_name" {
   type        = string
   default     = "log-normalizer"
 }
+variable "zone" {
+  description = "GCP compute zone for the SOC lab VM"
+  type        = string
+  default     = "asia-south2-a"
+}
