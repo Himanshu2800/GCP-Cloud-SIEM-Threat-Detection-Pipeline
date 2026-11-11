@@ -1,5 +1,6 @@
 title: GCP Storage Bucket Permissions Modified
 id: e5f6a7b8-c9d0-1234-efab-345678901234
+rule_id: GCP_BUCKET_PERMISSIONS_MODIFIED
 status: experimental
 description: Detects IAM permission changes on GCP Cloud Storage buckets which may indicate data exfiltration attempts via public bucket exposure
 author: Himanshu

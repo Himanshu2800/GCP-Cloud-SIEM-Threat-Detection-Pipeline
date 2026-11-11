@@ -1,5 +1,6 @@
 title: GCP IAM Policy Modified
 id: b2c3d4e5-f6a7-8901-bcde-f12345678901
+rule_id: GCP_IAM_POLICY_MODIFIED
 status: experimental
 description: Detects IAM policy changes in GCP which may indicate privilege escalation or unauthorized access grants
 author: Himanshu

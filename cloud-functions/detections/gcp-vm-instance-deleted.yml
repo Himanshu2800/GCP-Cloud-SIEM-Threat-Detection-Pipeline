@@ -1,5 +1,6 @@
 title: GCP VM Instance Deleted
 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+rule_id: GCP_VM_INSTANCE_DELETED
 status: experimental
 description: Detects deletion of a GCP Compute Engine VM instance which may indicate infrastructure destruction or attacker cleanup
 author: Himanshu
