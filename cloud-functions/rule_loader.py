@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 
 logger = logging.getLogger(__name__)
-SUPPORTED_OPERATORS = {"contains", "equals", "not_contains"}
+SUPPORTED_OPERATORS = {"contains", "equals", "not_contains", "greater_than"}
 SUPPORTED_CONDITION_LOGIC = {"AND", "OR"}
 
 REQUIRED_RULE_FIELDS = {

@@ -1,0 +1,30 @@
+title: GCP Large Egress to Public IP
+id: 7d1f3c52-8a4e-4b9a-9c6e-2f5b1a0d4e73
+status: experimental
+description: Detects a single VPC flow record where a VM sent a large amount of data to a public IP, which may indicate data exfiltration
+author: Himanshu
+date: 2026/11/11
+logsource:
+    category: cloud
+    product: gcp
+    service: vpcflow
+detection:
+    selection:
+        action: 'vpc_flow'
+        reporter: 'SRC'
+        dest_ip_classification: 'public'
+        bytes_sent|gt: 104857600
+    condition: selection
+falsepositives:
+    - Legitimate backups, software updates or data transfers to external services
+    - Traffic to Google APIs via Private Google Access (public IP ranges)
+level: high
+tags:
+    - attack.exfiltration
+    - attack.t1048
+fields:
+    - actor
+    - source_ip
+    - dest_ip
+    - dest_port
+    - bytes_sent

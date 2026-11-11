@@ -17,6 +17,7 @@ def classify_resource_type(normalized: dict) -> str:
     return RESOURCE_TYPE_BY_LOG_SOURCE.get(log_source, "Unknown")
 
 EVENT_CATEGORY_PATTERNS = [
+    ("vpc_flow", "Network Flow"),
 
     ("delete", "Deletion"),
     ("setiampolicy", "Permission Change"),
@@ -42,19 +43,27 @@ PRIVATE_NETWORKS = [
 ]
 
 
-def classify_ip(normalized: dict) -> str:
-    source_ip = normalized.get("source_ip")
-    if not source_ip or source_ip == "unknown":
+def _classify_address(ip) -> str:
+    if not ip or ip == "unknown":
         return "unknown"
     try:
-        addr = ipaddress.ip_address(source_ip)
+        addr = ipaddress.ip_address(ip)
     except ValueError:
         return "unknown"
     if any(addr in network for network in PRIVATE_NETWORKS):
         return "private"
     return "public"
 
+
+def classify_ip(normalized: dict) -> str:
+    return _classify_address(normalized.get("source_ip"))
+
+
+def classify_dest_ip(normalized: dict) -> str:
+    return _classify_address(normalized.get("dest_ip"))
+
 ACTION_DESCRIPTIONS = [
+    ("vpc_flow", "VPC flow record"),
     ("compute.instances.delete", "VM instance deleted"),
     ("setiampolicy", "IAM policy modified"),
     ("firewalls.delete", "Firewall rule deleted"),
@@ -104,6 +113,8 @@ def enrich_event(normalized: dict) -> dict:
     enriched["ip_classification"] = ip_classification
     enriched["action_description"] = action_description
     enriched["risk_score"] = risk_score
+    if "dest_ip" in normalized:
+        enriched["dest_ip_classification"] = classify_dest_ip(normalized)
 
     masked_ip = _mask_ip(normalized.get("source_ip"))
     logger.info(

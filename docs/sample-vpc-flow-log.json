@@ -1,0 +1,14 @@
+{
+  "insertId": "1abc2def3ghi",
+  "logName": "projects/cloud-siem-detection-lab/logs/compute.googleapis.com%2Fvpc_flows",
+  "timestamp": "2026-11-11T10:15:05.000Z",
+  "severity": "INFO",
+  "resource": {"type": "gce_subnetwork", "labels": {"subnetwork_name": "soc-subnet", "location": "asia-south2"}},
+  "jsonPayload": {
+    "reporter": "SRC",
+    "bytes_sent": "157286400",
+    "packets_sent": "110000",
+    "connection": {"protocol": 6, "src_ip": "10.0.0.5", "src_port": 52344, "dest_ip": "198.51.100.23", "dest_port": 443},
+    "src_instance": {"vm_name": "opensearch-vm", "zone": "asia-south2-a"}
+  }
+}
