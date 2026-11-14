@@ -37,3 +37,13 @@ variable "zone" {
   type        = string
   default     = "asia-south2-a"
 }
+
+variable "admin_source_ranges" {
+  description = "CIDR ranges allowed to reach SSH (22) and Grafana (3000) on the SOC lab VM, e.g. [\"203.0.113.7/32\"]. Required, and must not include 0.0.0.0/0."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.admin_source_ranges) > 0 && !contains(var.admin_source_ranges, "0.0.0.0/0")
+    error_message = "admin_source_ranges must be non-empty and must not contain 0.0.0.0/0. Use your own IP, for example [\"YOUR.IP.ADDRESS/32\"]."
+  }
+}
