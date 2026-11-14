@@ -36,8 +36,9 @@ the changes you actually intend) before applying.
 
 ```bash
 cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# edit terraform.tfvars with your real project_id
+# create terraform.tfvars (not committed) with:
+#   project_id          = "your-gcp-project-id"
+#   admin_source_ranges = ["YOUR.IP.ADDRESS/32"]   # curl ifconfig.me; 0.0.0.0/0 is rejected
 
 terraform init
 terraform validate
