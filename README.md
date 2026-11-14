@@ -134,7 +134,7 @@ mapping.
 ├── terraform/
 │   ├── main.tf              # Pub/Sub topic/sub, logging sink (audit + flow logs), Cloud Run data source
 │   ├── compute.tf           # GCE VM running OpenSearch/Dashboards/Grafana in Docker
-│   ├── firewall.tf          # Firewall rules (SSH and Grafana are open to 0.0.0.0/0 in this lab config)
+│   ├── firewall.tf          # Firewall rules (SSH/Grafana limited to admin_source_ranges)
 │   └── vpc.tf, variables.tf, providers.tf, outputs.tf
 │
 ├── cloud-functions/         # The Cloud Run service
@@ -180,12 +180,10 @@ mapping.
 ```bash
 cd terraform
 # Create terraform.tfvars (not committed) with at least:
-#   project_id = "your-gcp-project-id"
+#   project_id          = "your-gcp-project-id"
+#   admin_source_ranges = ["YOUR.IP.ADDRESS/32"]   # curl ifconfig.me
+# admin_source_ranges is required and 0.0.0.0/0 is rejected by validation.
 # Other variables and their defaults are in variables.tf.
-#
-# IMPORTANT: firewall.tf currently allows SSH (22) and Grafana (3000) from
-# 0.0.0.0/0. Before reusing this outside a throwaway lab, change those
-# source_ranges to your own IP (curl ifconfig.me), e.g. ["YOUR.IP.ADDRESS/32"].
 ```
 
 ### 2. Provision infrastructure
@@ -330,10 +328,11 @@ suite — CI will run it automatically on the next push/PR.
   redelivery re-sends the alert (only correlations are deduplicated). A
   malformed message returns HTTP 400, which Pub/Sub retries; a dead-letter
   topic would stop that.
-- **The lab firewall is permissive**: `terraform/firewall.tf` allows SSH and
-  Grafana from `0.0.0.0/0`. That is acceptable for a short-lived lab but not
-  for anything real. Restrict `source_ranges` to your own IP (OpenSearch on
-  port 9200 is already limited to the internal subnet).
+- **Admin access depends on your IP**: SSH (22) and Grafana (3000) are limited
+  to `admin_source_ranges`, a required variable that rejects `0.0.0.0/0`. If your
+  ISP changes your IP you will need to update it (or use IAP for SSH).
+  OpenSearch on port 9200 is limited to the internal subnet. These Terraform
+  changes have not been through a live `terraform plan`.
 - **MITRE mappings are a first pass**, not a rigorously reviewed
   mapping — see the note on T1078 above.
 - **Terraform changes since the original deployment are unapplied.** The
