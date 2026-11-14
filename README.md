@@ -1,7 +1,7 @@
 # GCP Cloud SIEM — Threat Detection Pipeline
 
 A cloud-native detection-engineering pipeline built on GCP. Cloud Audit Log
-events flow through Pub/Sub into a Cloud Run service that normalizes,
+and VPC Flow Log events flow through Pub/Sub into a Cloud Run service that normalizes,
 enriches, and evaluates them against YAML detection rules, correlates
 related findings across a short time window, indexes everything into
 OpenSearch, and routes alerts to Slack/PagerDuty. A Grafana dashboard
@@ -18,7 +18,7 @@ means concretely.
 <img width="1024" height="1536" alt="image" src="https://github.com/user-attachments/assets/18d17996-9ab7-43a3-b753-8288ccead077" />
 
 ```
-GCP Cloud Audit Logs (activity + data_access)
+GCP Cloud Audit Logs (activity + data_access) + VPC Flow Logs
         │
         ▼
   Cloud Logging Sink  ──▶  Pub/Sub topic  ──▶  Pub/Sub push subscription
@@ -52,9 +52,9 @@ GCP Cloud Audit Logs (activity + data_access)
   and unique across all loaded rules.
 - **A custom, Sigma-inspired rule engine** (`detector.py` + `rule_loader.py`),
   not `sigma-cli`. Rules support `condition_logic: AND/OR` over a list of
-  `conditions`, each using one of three operators: `contains`, `equals`,
-  `not_contains`. `sigma-rules/` additionally holds true Sigma-syntax
-  versions of the same 5 detections, kept for portability/documentation —
+  `conditions`, each using one of four operators: `contains`, `equals`,
+  `not_contains`, `greater_than` (numeric). `sigma-rules/` additionally holds true Sigma-syntax
+  versions of the same 6 detections, kept for portability/documentation —
   the engine itself only reads `cloud-functions/detections/`.
 - **A correlation engine** (`correlation.py`) that chains two findings by
   the same actor within a 15-minute window: IAM policy change → new
@@ -63,12 +63,18 @@ GCP Cloud Audit Logs (activity + data_access)
   itself as a portfolio-scope limitation, not something the code pretends
   isn't there.
 - **A regression test suite** (`cloud-functions/tests/`): `test_runner.py`
-  checks 8 fixture events (5 rule-firing cases + 3 negative/benign cases)
-  against `expected_results.json`, and `test_correlation.py` separately
+  checks 6 fixture events (5 rule-firing cases + 1 benign case)
+  against `expected_results.json`, `test_flow_logs.py` runs the VPC Flow Log
+  path end to end (normalize, enrich, detect; 9 cases including benign ones),
+  and `test_correlation.py` separately
   covers the correlation engine with 6 sequential-event scenarios (both
   correlation rules firing, actor isolation, time-window enforcement, a
-  missing precursor, and dedup on event replay). Both run in CI on every
-  push/PR via `.github/workflows/tests.yml`.
+  missing precursor, and dedup on event replay). All three run in CI on every
+  push/PR via `.github/workflows/tests.yml`, after a syntax check of every
+  Python file.
+- **A local replay demo** (`demo/replay_flow_log.py`) that sends a sample VPC
+  flow log (plus benign variations) through the real Flask app with no GCP,
+  OpenSearch or Slack needed. See [Local demo](#local-demo).
 - **Terraform** for the GCP side (Pub/Sub, logging sink, and a GCE VM
   running OpenSearch/OpenSearch Dashboards/Grafana in Docker) — see
   `terraform/`.
@@ -81,7 +87,7 @@ GCP Cloud Audit Logs (activity + data_access)
 |---|---|---|---|---|
 | `gcp-iam-privilege-escalation.yml` | `GCP_IAM_POLICY_MODIFIED` | T1078 | HIGH | IAM policy modified via `setIamPolicy` |
 | `gcp-service-account-key-created.yml` | `GCP_SERVICE_ACCOUNT_KEY_CREATED` | T1098.001 | HIGH | New service account key created |
-| `gcp-bucket-made-public.yml` | `GCP_BUCKET_PERMISSIONS_MODIFIED` | T1530 | HIGH | Storage bucket IAM permissions modified |
+| `gcp-bucket-made-public.yml` | `GCP_BUCKET_PERMISSIONS_MODIFIED` | T1530 | HIGH | Storage bucket IAM permissions modified (does not check for `allUsers`, so it detects permission changes, not public exposure) |
 | `gcp-firewall-rule-deleted.yml` | `GCP_FIREWALL_RULE_DELETED` | T1562.007 | HIGH | VPC firewall rule deleted |
 | `gcp-vm-instance-deleted.yml` | `GCP_VM_INSTANCE_DELETED` | T1485 | MEDIUM | Compute instance deleted |
 | `gcp-large-egress-public-ip.yml` | `GCP_LARGE_EGRESS_PUBLIC_IP` | T1048 | HIGH | Single VPC flow record sending over 100 MB to a public IP |
@@ -110,7 +116,7 @@ mapping.
 
 | Layer | Technology |
 |---|---|
-| Log source | GCP Cloud Audit Logs (admin activity + data access) |
+| Log sources | GCP Cloud Audit Logs (admin activity + data access), VPC Flow Logs |
 | Ingestion | Cloud Pub/Sub |
 | Processing | Cloud Run (Flask, Python) |
 | Detection | Custom Sigma-inspired YAML rule engine (not sigma-cli) |
@@ -126,32 +132,34 @@ mapping.
 ```
 .
 ├── terraform/
-│   ├── main.tf              # Pub/Sub topic/sub, logging sink, Cloud Run data source
+│   ├── main.tf              # Pub/Sub topic/sub, logging sink (audit + flow logs), Cloud Run data source
 │   ├── compute.tf           # GCE VM running OpenSearch/Dashboards/Grafana in Docker
-│   ├── firewall.tf          # Firewall rules (SSH/Grafana restricted to admin_source_ranges)
-│   ├── vpc.tf, variables.tf, providers.tf, outputs.tf
-│   └── terraform.tfvars.example
+│   ├── firewall.tf          # Firewall rules (SSH and Grafana are open to 0.0.0.0/0 in this lab config)
+│   └── vpc.tf, variables.tf, providers.tf, outputs.tf
 │
 ├── cloud-functions/         # The Cloud Run service
 │   ├── main.py               # Flask entrypoint: Pub/Sub push handler
-│   ├── normalizer.py         # Cloud Audit Log JSON -> normalized event
+│   ├── normalizer.py         # Audit log + VPC flow log JSON -> normalized event
 │   ├── enrichment.py         # resource_type, event_category, ip_classification, risk_score
-│   ├── detector.py           # Rule evaluator (AND/OR, contains/equals/not_contains)
+│   ├── detector.py           # Rule evaluator (AND/OR, contains/equals/not_contains/greater_than)
 │   ├── rule_loader.py        # Loads + validates YAML rules from detections/
 │   ├── correlation.py        # Multi-event correlation (in-memory, actor-keyed)
 │   ├── opensearch_client.py  # Indexing
 │   ├── alert_router.py       # Routes findings to Slack/PagerDuty by severity
 │   ├── pagerduty.py, alerter.py, config.py
-│   ├── detections/           # 5 rules in the engine's own YAML format
+│   ├── detections/           # 6 rules in the engine's own YAML format
 │   ├── requirements.txt      # flask, requests, urllib3, pyyaml
 │   └── tests/
 │       ├── test_runner.py       # single-event detection regression tests
 │       ├── test_correlation.py  # multi-event correlation regression tests
+│       ├── test_flow_logs.py    # VPC flow log end-to-end tests
 │       ├── expected_results.json
-│       └── test_cases/       # 8 fixture events
+│       └── test_cases/       # 6 fixture events
 │
-├── sigma-rules/              # Same 5 detections in true Sigma syntax (reference only)
-├── docs/                     # Sample raw + normalized event JSON
+├── demo/                     # Local replay demo (no cloud needed)
+├── sigma-rules/              # Same 6 detections in true Sigma syntax (reference only)
+├── docs/                     # Sample raw + normalized event JSON (audit + flow log)
+├── .github/workflows/        # CI: syntax check + tests
 ├── screenshots/              # OpenSearch/Grafana/detection screenshots
 └── LICENSE
 ```
@@ -171,9 +179,13 @@ mapping.
 
 ```bash
 cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set project_id, and set admin_source_ranges to
-# YOUR IP (curl ifconfig.me) -- do not leave it as 0.0.0.0/0.
+# Create terraform.tfvars (not committed) with at least:
+#   project_id = "your-gcp-project-id"
+# Other variables and their defaults are in variables.tf.
+#
+# IMPORTANT: firewall.tf currently allows SSH (22) and Grafana (3000) from
+# 0.0.0.0/0. Before reusing this outside a throwaway lab, change those
+# source_ranges to your own IP (curl ifconfig.me), e.g. ["YOUR.IP.ADDRESS/32"].
 ```
 
 ### 2. Provision infrastructure
@@ -222,13 +234,14 @@ cd cloud-functions
 pip install -r requirements.txt --break-system-packages
 python3 tests/test_runner.py       # single-event detection tests
 python3 tests/test_correlation.py  # multi-event correlation tests
+python3 tests/test_flow_logs.py    # VPC flow log tests
 ```
 
-Neither script needs GCP, Flask, or OpenSearch — both import the pure
-logic modules (`detector.py`, `rule_loader.py`, `correlation.py`) directly.
+None of these scripts need GCP or OpenSearch — they import the pure
+logic modules (`normalizer.py`, `enrichment.py`, `detector.py`, `rule_loader.py`, `correlation.py`) directly.
 
-`test_runner.py` runs 8 fixture events (5 that should fire a specific
-rule, 3 benign/read-only events that should fire nothing) and diffs the
+`test_runner.py` runs 6 fixture events (5 that should fire a specific
+rule, 1 benign/read-only event that should fire nothing) and diffs the
 actual findings against `expected_results.json`.
 
 `test_correlation.py` feeds sequences of events through the correlation
@@ -237,6 +250,27 @@ happens for the same actor within the time window; correlation does
 NOT fire across different actors, outside the time window, or when only
 one step of a sequence occurs; and a replayed/duplicate event doesn't
 produce a second correlation for evidence already seen.
+
+`test_flow_logs.py` wraps a sample flow log in a Pub/Sub envelope and checks
+normalization, destination-IP enrichment, and detection: a 150 MB transfer to a
+public IP fires `GCP_LARGE_EGRESS_PUBLIC_IP`, while a tiny transfer, a private
+destination, a DEST-side duplicate record, and a non-numeric `bytes_sent` do not.
+
+---
+
+## Local demo
+
+No GCP project, OpenSearch, Grafana or Slack needed. From the repo root:
+
+```bash
+pip install -r cloud-functions/requirements.txt
+python3 demo/replay_flow_log.py    # on Windows: python demo\replay_flow_log.py
+```
+
+It sends a sample VPC flow log through the real Flask app, with indexing and
+alerts replaced by printed lines. Expect one HIGH alert for the 150 MB transfer
+to a public IP, and no alert for a 1 KB transfer, a private destination, or a
+DEST-side duplicate record. This is a local replay, not a live deployment.
 
 ---
 
@@ -286,20 +320,30 @@ suite — CI will run it automatically on the next push/PR.
   untuned, and traffic to Google APIs via Private Google Access uses
   public IP ranges, so expect to tune for false positives. GKE audit
   logs are still not normalized.
-- **Feedback-loop guard**: the logging sink excludes flow records on
-  port 9200 so the pipeline's own OpenSearch traffic is not re-ingested.
-  That filter change has not been through `terraform plan`.
+- **Feedback-loop guard**: the logging sink in `terraform/main.tf` excludes
+  flow records on port 9200 so the pipeline's own OpenSearch traffic is not
+  re-ingested. That filter change has not been applied to a live project.
+- **Flow-log detection has not been deployed.** It is covered by unit tests in
+  CI and a local replay (`demo/`), but billing on the original GCP project has
+  ended, so it has not seen real flow records.
+- **Alerting gaps**: single-rule findings are not deduplicated, so a Pub/Sub
+  redelivery re-sends the alert (only correlations are deduplicated). A
+  malformed message returns HTTP 400, which Pub/Sub retries; a dead-letter
+  topic would stop that.
+- **The lab firewall is permissive**: `terraform/firewall.tf` allows SSH and
+  Grafana from `0.0.0.0/0`. That is acceptable for a short-lived lab but not
+  for anything real. Restrict `source_ranges` to your own IP (OpenSearch on
+  port 9200 is already limited to the internal subnet).
 - **MITRE mappings are a first pass**, not a rigorously reviewed
   mapping — see the note on T1078 above.
-- **Terraform has not been run through a live `terraform plan`/`apply`**
-  against a real GCP project as part of this repo's validation — the
-  `.tf` files have been manually cross-checked for duplicate resources,
-  undeclared variables, and broken references, but that's not a
-  substitute for an actual plan/apply cycle before you rely on it. The
-  Pub/Sub topic/subscription and logging sink are fully Terraform-owned
-  (created fresh on `apply`, not assumed to pre-exist); only the Cloud
-  Run service is intentionally external, since its container image is
-  deployed via `gcloud run deploy` rather than Terraform.
+- **Terraform changes since the original deployment are unapplied.** The
+  flow-log sink filter and later edits have not been through a `terraform
+  plan`/`apply` against a live project (billing ended). The `.tf` files have
+  been cross-checked for duplicate resources and broken references, which is
+  not a substitute for an actual plan/apply before you rely on them. The
+  Pub/Sub topic/subscription and logging sink are fully Terraform-owned; only
+  the Cloud Run service is external, since its image is deployed via
+  `gcloud run deploy`.
 
 ---
 
