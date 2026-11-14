@@ -20,7 +20,7 @@ resource "google_compute_firewall" "allow_grafana" {
     ports    = ["3000"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.admin_source_ranges
   direction     = "INGRESS"
 }
 
@@ -33,6 +33,6 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = var.admin_source_ranges
   direction     = "INGRESS"
 }
