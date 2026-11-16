@@ -376,4 +376,4 @@ suite — CI will run it automatically on the next push/PR.
 
 ## License
 
-MIT — use it, extend it, put it in your portfolio.
+MIT
