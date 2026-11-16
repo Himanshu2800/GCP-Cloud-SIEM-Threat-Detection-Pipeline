@@ -21,10 +21,20 @@ resource "google_compute_instance" "soc_lab_vm" {
 
   metadata_startup_script = <<-EOT
     #!/bin/bash
+    set -eu
+    umask 077
     apt-get update
-    apt-get install -y docker.io
+    apt-get install -y docker.io openssl
     systemctl start docker
     systemctl enable docker
+
+    # Generate once per VM and reuse on subsequent boots. Never print the secret.
+    install -d -m 700 /opt/opensearch
+    if [ ! -s /opt/opensearch/admin.env ]; then
+      generated_password=$(openssl rand -hex 32)
+      printf 'OPENSEARCH_INITIAL_ADMIN_PASSWORD=Aa1!%s\n' "$generated_password" > /opt/opensearch/admin.env
+    fi
+    chmod 600 /opt/opensearch/admin.env
 
     # Run OpenSearch
     docker run -d \
@@ -32,7 +42,7 @@ resource "google_compute_instance" "soc_lab_vm" {
       -p 9200:9200 \
       -p 9600:9600 \
       -e "discovery.type=single-node" \
-      -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=YourStrongPassword123!" \
+      --env-file /opt/opensearch/admin.env \
       opensearchproject/opensearch:latest
 
     # Run OpenSearch Dashboards
